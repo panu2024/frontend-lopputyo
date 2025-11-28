@@ -31,12 +31,26 @@ export default function CustomersPage() {
     phone: ''
   });
 
+  const [trainingFor, setTrainingFor] = useState(null);
+  const [trainingForm, setTrainingForm] = useState({
+    date: '',
+    duration: '',
+    activity: ''
+  });
+
   useEffect(() => {
-    fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers')
-      .then(res => res.json())
-      .then(json => setCustomers(json._embedded.customers))
-      .catch(err => setError(String(err)));
+    loadCustomers();
   }, []);
+
+  async function loadCustomers() {
+    try {
+      const res = await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers');
+      const json = await res.json();
+      setCustomers(json._embedded.customers);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
 
   function toggleSort(key) {
     setSort(prev =>
@@ -54,14 +68,11 @@ export default function CustomersPage() {
   async function handleNewCustomerSubmit(e) {
     e.preventDefault();
     try {
-      const res = await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers', {
+      await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCustomer)
       });
-      if (!res.ok) {
-        throw new Error('Asiakkaan lisäys epäonnistui');
-      }
       setNewCustomer({
         firstname: '',
         lastname: '',
@@ -71,25 +82,22 @@ export default function CustomersPage() {
         email: '',
         phone: ''
       });
-      const listRes = await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers');
-      const json = await listRes.json();
-      setCustomers(json._embedded.customers);
-      setError(null);
-    } catch (err) {
+      await loadCustomers();
+    } catch {
       alert('Asiakkaan lisäys epäonnistui');
     }
   }
 
-  function startEditCustomer(customer) {
-    setEditingHref(customer._links.self.href);
+  function startEditCustomer(c) {
+    setEditingHref(c._links.self.href);
     setEditCustomer({
-      firstname: customer.firstname ?? '',
-      lastname: customer.lastname ?? '',
-      streetaddress: customer.streetaddress ?? '',
-      postcode: customer.postcode ?? '',
-      city: customer.city ?? '',
-      email: customer.email ?? '',
-      phone: customer.phone ?? ''
+      firstname: c.firstname ?? '',
+      lastname: c.lastname ?? '',
+      streetaddress: c.streetaddress ?? '',
+      postcode: c.postcode ?? '',
+      city: c.city ?? '',
+      email: c.email ?? '',
+      phone: c.phone ?? ''
     });
   }
 
@@ -104,80 +112,97 @@ export default function CustomersPage() {
 
   async function saveEditCustomer(href) {
     try {
-      const res = await fetch(href, {
+      await fetch(href, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editCustomer)
       });
-      if (!res.ok) {
-        throw new Error('Asiakkaan muokkaus epäonnistui');
-      }
-      const listRes = await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers');
-      const json = await listRes.json();
-      setCustomers(json._embedded.customers);
       setEditingHref(null);
-      setError(null);
-    } catch (err) {
+      await loadCustomers();
+    } catch {
       alert('Asiakkaan muokkaus epäonnistui');
     }
   }
 
-  async function handleDeleteCustomer(customer) {
-    const ok = window.confirm(
-      'Haluatko varmasti poistaa tämän asiakkaan? '
-    );
+  async function handleDeleteCustomer(c) {
+    const ok = window.confirm('Haluatko varmasti poistaa tämän asiakkaan?');
     if (!ok) return;
     try {
-      const res = await fetch(customer._links.self.href, {
-        method: 'DELETE'
-      });
-      if (!res.ok) {
-        throw new Error('Asiakkaan poisto epäonnistui');
-      }
-      const listRes = await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers');
-      const json = await listRes.json();
-      setCustomers(json._embedded.customers);
-      setError(null);
-    } catch (err) {
+      await fetch(c._links.self.href, { method: 'DELETE' });
+      await loadCustomers();
+    } catch {
       alert('Asiakkaan poisto epäonnistui');
+    }
+  }
+
+  function openTrainingForm(c) {
+    setTrainingFor(c._links.self.href);
+    setTrainingForm({
+      date: '',
+      duration: '',
+      activity: ''
+    });
+  }
+
+  function cancelTraining() {
+    setTrainingFor(null);
+  }
+
+  function handleTrainingChange(e) {
+    const { name, value } = e.target;
+    setTrainingForm(prev => ({ ...prev, [name]: value }));
+  }
+
+  async function saveTraining(e) {
+    e.preventDefault();
+    try {
+      const iso = new Date(trainingForm.date).toISOString();
+      await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/trainings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: iso,
+          duration: Number(trainingForm.duration),
+          activity: trainingForm.activity,
+          customer: trainingFor
+        })
+      });
+      setTrainingFor(null);
+    } catch {
+      alert('Treeniä ei voitu tallentaa');
     }
   }
 
   const sorted = useMemo(() => {
     const arr = [...customers];
     arr.sort((a, b) => {
-      const va = (a[sort.key] ?? '').toString().toLowerCase();
-      const vb = (b[sort.key] ?? '').toString().toLowerCase();
-      if (va < vb) return sort.dir === 'asc' ? -1 : 1;
-      if (va > vb) return sort.dir === 'asc' ? 1 : -1;
-      return 0;
+      const va = (a[sort.key] ?? '').toLowerCase();
+      const vb = (b[sort.key] ?? '').toLowerCase();
+      return sort.dir === 'asc'
+        ? va.localeCompare(vb)
+        : vb.localeCompare(va);
     });
     return arr;
   }, [customers, sort]);
 
   const filtered = useMemo(() => {
-    const f = firstFilter.trim().toLowerCase();
-    const l = lastFilter.trim().toLowerCase();
-    const e = emailFilter.trim().toLowerCase();
-    const c = cityFilter.trim().toLowerCase();
+    const f = firstFilter.toLowerCase();
+    const l = lastFilter.toLowerCase();
+    const e = emailFilter.toLowerCase();
+    const c = cityFilter.toLowerCase();
 
-    return sorted.filter(x => {
-      const firstOk = !f || (x.firstname ?? '').toLowerCase().includes(f);
-      const lastOk = !l || (x.lastname ?? '').toLowerCase().includes(l);
-      const emailOk = !e || (x.email ?? '').toLowerCase().includes(e);
-      const cityOk = !c || (x.city ?? '').toLowerCase().includes(c);
-      return firstOk && lastOk && emailOk && cityOk;
-    });
+    return sorted.filter(x =>
+      (!f || x.firstname?.toLowerCase().includes(f)) &&
+      (!l || x.lastname?.toLowerCase().includes(l)) &&
+      (!e || x.email?.toLowerCase().includes(e)) &&
+      (!c || x.city?.toLowerCase().includes(c))
+    );
   }, [sorted, firstFilter, lastFilter, emailFilter, cityFilter]);
 
   if (error) return <p style={{ padding: 16 }}>Virhe: {error}</p>;
-  if (!customers.length) return <p style={{ padding: 16 }}>Ladataan…</p>;
-
-  const thStyle = { cursor: 'pointer', userSelect: 'none' };
-  const arrow = k => (sort.key === k ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '');
 
   return (
-    <div style={{ padding: 16 }}>
+    <div style={{ padding: 16, backgroundColor: 'red', minHeight: '100vh' }}>
       <h2>Customers</h2>
 
       <form
@@ -189,55 +214,13 @@ export default function CustomersPage() {
           margin: '8px 0 16px'
         }}
       >
-        <input
-          name="firstname"
-          value={newCustomer.firstname}
-          onChange={handleNewCustomerChange}
-          placeholder="Firstname"
-          required
-        />
-        <input
-          name="lastname"
-          value={newCustomer.lastname}
-          onChange={handleNewCustomerChange}
-          placeholder="Lastname"
-          required
-        />
-        <input
-          name="email"
-          value={newCustomer.email}
-          onChange={handleNewCustomerChange}
-          placeholder="Email"
-          required
-        />
-        <input
-          name="phone"
-          value={newCustomer.phone}
-          onChange={handleNewCustomerChange}
-          placeholder="Phone"
-          required
-        />
-        <input
-          name="streetaddress"
-          value={newCustomer.streetaddress}
-          onChange={handleNewCustomerChange}
-          placeholder="Street address"
-          required
-        />
-        <input
-          name="postcode"
-          value={newCustomer.postcode}
-          onChange={handleNewCustomerChange}
-          placeholder="Postcode"
-          required
-        />
-        <input
-          name="city"
-          value={newCustomer.city}
-          onChange={handleNewCustomerChange}
-          placeholder="City"
-          required
-        />
+        <input name="firstname" value={newCustomer.firstname} onChange={handleNewCustomerChange} placeholder="Firstname" required />
+        <input name="lastname" value={newCustomer.lastname} onChange={handleNewCustomerChange} placeholder="Lastname" required />
+        <input name="email" value={newCustomer.email} onChange={handleNewCustomerChange} placeholder="Email" required />
+        <input name="phone" value={newCustomer.phone} onChange={handleNewCustomerChange} placeholder="Phone" required />
+        <input name="streetaddress" value={newCustomer.streetaddress} onChange={handleNewCustomerChange} placeholder="Street address" required />
+        <input name="postcode" value={newCustomer.postcode} onChange={handleNewCustomerChange} placeholder="Postcode" required />
+        <input name="city" value={newCustomer.city} onChange={handleNewCustomerChange} placeholder="City" required />
         <button type="submit">Lisää asiakas</button>
       </form>
 
@@ -249,125 +232,100 @@ export default function CustomersPage() {
           margin: '8px 0 16px'
         }}
       >
-        <label>
-          <input
-            value={firstFilter}
-            onChange={e => setFirstFilter(e.target.value)}
-            placeholder="Type firstname..."
-          />
-        </label>
-        <label>
-          <input
-            value={lastFilter}
-            onChange={e => setLastFilter(e.target.value)}
-            placeholder="Type lastname..."
-          />
-        </label>
-        <label>
-          <input
-            value={emailFilter}
-            onChange={e => setEmailFilter(e.target.value)}
-            placeholder="Type email..."
-          />
-        </label>
-        <label>
-          <input
-            value={cityFilter}
-            onChange={e => setCityFilter(e.target.value)}
-            placeholder="Type city..."
-          />
-        </label>
+        <input value={firstFilter} onChange={e => setFirstFilter(e.target.value)} placeholder="Type firstname..." />
+        <input value={lastFilter} onChange={e => setLastFilter(e.target.value)} placeholder="Type lastname..." />
+        <input value={emailFilter} onChange={e => setEmailFilter(e.target.value)} placeholder="Type email..." />
+        <input value={cityFilter} onChange={e => setCityFilter(e.target.value)} placeholder="Type city..." />
       </div>
 
-      <table
-        border="1"
-        cellPadding="6"
-        style={{ borderCollapse: 'collapse', width: '100%' }}
-      >
+      <table border="1" cellPadding="6" style={{ borderCollapse: 'collapse', width: '100%' }}>
         <thead>
           <tr>
-            <th style={thStyle} onClick={() => toggleSort('firstname')}>
-              Firstname{arrow('firstname')}
-            </th>
-            <th style={thStyle} onClick={() => toggleSort('lastname')}>
-              Lastname{arrow('lastname')}
-            </th>
-            <th style={thStyle} onClick={() => toggleSort('email')}>
-              Email{arrow('email')}
-            </th>
-            <th style={thStyle} onClick={() => toggleSort('phone')}>
-              Phone{arrow('phone')}
-            </th>
-            <th style={thStyle} onClick={() => toggleSort('city')}>
-              City{arrow('city')}
-            </th>
+            <th onClick={() => toggleSort('firstname')} style={{ cursor: 'pointer' }}>Firstname</th>
+            <th onClick={() => toggleSort('lastname')} style={{ cursor: 'pointer' }}>Lastname</th>
+            <th onClick={() => toggleSort('email')} style={{ cursor: 'pointer' }}>Email</th>
+            <th onClick={() => toggleSort('phone')} style={{ cursor: 'pointer' }}>Phone</th>
+            <th onClick={() => toggleSort('city')} style={{ cursor: 'pointer' }}>City</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {filtered.map((c, i) => {
-            const isEditing = editingHref === c._links.self.href;
-            if (isEditing) {
+            const edit = editingHref === c._links.self.href;
+            const addTraining = trainingFor === c._links.self.href;
+
+            if (edit) {
               return (
                 <tr key={i}>
+                  <td><input name="firstname" value={editCustomer.firstname} onChange={handleEditCustomerChange} /></td>
+                  <td><input name="lastname" value={editCustomer.lastname} onChange={handleEditCustomerChange} /></td>
+                  <td><input name="email" value={editCustomer.email} onChange={handleEditCustomerChange} /></td>
+                  <td><input name="phone" value={editCustomer.phone} onChange={handleEditCustomerChange} /></td>
+                  <td><input name="city" value={editCustomer.city} onChange={handleEditCustomerChange} /></td>
                   <td>
-                    <input
-                      name="firstname"
-                      value={editCustomer.firstname}
-                      onChange={handleEditCustomerChange}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      name="lastname"
-                      value={editCustomer.lastname}
-                      onChange={handleEditCustomerChange}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      name="email"
-                      value={editCustomer.email}
-                      onChange={handleEditCustomerChange}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      name="phone"
-                      value={editCustomer.phone}
-                      onChange={handleEditCustomerChange}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      name="city"
-                      value={editCustomer.city}
-                      onChange={handleEditCustomerChange}
-                    />
-                  </td>
-                  <td>
-                    <button onClick={() => saveEditCustomer(c._links.self.href)}>
-                      Tallenna
-                    </button>
-                    <button type="button" onClick={cancelEditCustomer}>
-                      Peruuta
-                    </button>
+                    <button onClick={() => saveEditCustomer(c._links.self.href)}>Tallenna</button>
+                    <button onClick={cancelEditCustomer}>Peruuta</button>
                   </td>
                 </tr>
               );
             }
+
             return (
-              <tr key={i}>
-                <td>{c.firstname}</td>
-                <td>{c.lastname}</td>
-                <td>{c.email}</td>
-                <td>{c.phone}</td>
-                <td>{c.city}</td>
-                <td>
-                  <button onClick={() => startEditCustomer(c)}>Muokkaa</button>
-                  <button onClick={() => handleDeleteCustomer(c)}>Poista</button>
-                </td>
-              </tr>
+              <>
+                <tr key={i}>
+                  <td>{c.firstname}</td>
+                  <td>{c.lastname}</td>
+                  <td>{c.email}</td>
+                  <td>{c.phone}</td>
+                  <td>{c.city}</td>
+                  <td>
+                    <button onClick={() => startEditCustomer(c)}>Muokkaa</button>
+                    <button onClick={() => handleDeleteCustomer(c)}>Poista</button>
+                    <button onClick={() => openTrainingForm(c)}>Lisää treeni</button>
+                  </td>
+                </tr>
+
+                {addTraining && (
+                  <tr>
+                    <td colSpan="6">
+                      <form
+                        onSubmit={saveTraining}
+                        style={{
+                          display: 'grid',
+                          gap: 8,
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                          marginTop: 10
+                        }}
+                      >
+                        <input
+                          type="datetime-local"
+                          name="date"
+                          value={trainingForm.date}
+                          onChange={handleTrainingChange}
+                          required
+                        />
+                        <input
+                          name="duration"
+                          type="number"
+                          value={trainingForm.duration}
+                          onChange={handleTrainingChange}
+                          placeholder="Duration (min)"
+                          required
+                        />
+                        <input
+                          name="activity"
+                          value={trainingForm.activity}
+                          onChange={handleTrainingChange}
+                          placeholder="Activity"
+                          required
+                        />
+                        <button type="submit">Tallenna</button>
+                        <button type="button" onClick={cancelTraining}>Sulje</button>
+                      </form>
+                    </td>
+                  </tr>
+                )}
+              </>
             );
           })}
         </tbody>

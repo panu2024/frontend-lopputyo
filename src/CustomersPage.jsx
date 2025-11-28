@@ -20,6 +20,17 @@ export default function CustomersPage() {
     phone: ''
   });
 
+  const [editingHref, setEditingHref] = useState(null);
+  const [editCustomer, setEditCustomer] = useState({
+    firstname: '',
+    lastname: '',
+    streetaddress: '',
+    postcode: '',
+    city: '',
+    email: '',
+    phone: ''
+  });
+
   useEffect(() => {
     fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers')
       .then(res => res.json())
@@ -66,6 +77,48 @@ export default function CustomersPage() {
       setError(null);
     } catch (err) {
       alert('Asiakkaan lisäys epäonnistui');
+    }
+  }
+
+  function startEditCustomer(customer) {
+    setEditingHref(customer._links.self.href);
+    setEditCustomer({
+      firstname: customer.firstname ?? '',
+      lastname: customer.lastname ?? '',
+      streetaddress: customer.streetaddress ?? '',
+      postcode: customer.postcode ?? '',
+      city: customer.city ?? '',
+      email: customer.email ?? '',
+      phone: customer.phone ?? ''
+    });
+  }
+
+  function cancelEditCustomer() {
+    setEditingHref(null);
+  }
+
+  function handleEditCustomerChange(e) {
+    const { name, value } = e.target;
+    setEditCustomer(prev => ({ ...prev, [name]: value }));
+  }
+
+  async function saveEditCustomer(href) {
+    try {
+      const res = await fetch(href, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editCustomer)
+      });
+      if (!res.ok) {
+        throw new Error('Asiakkaan muokkaus epäonnistui');
+      }
+      const listRes = await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers');
+      const json = await listRes.json();
+      setCustomers(json._embedded.customers);
+      setEditingHref(null);
+      setError(null);
+    } catch (err) {
+      alert('Asiakkaan muokkaus epäonnistui');
     }
   }
 
@@ -227,18 +280,74 @@ export default function CustomersPage() {
             <th style={thStyle} onClick={() => toggleSort('city')}>
               City{arrow('city')}
             </th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {filtered.map((c, i) => (
-            <tr key={i}>
-              <td>{c.firstname}</td>
-              <td>{c.lastname}</td>
-              <td>{c.email}</td>
-              <td>{c.phone}</td>
-              <td>{c.city}</td>
-            </tr>
-          ))}
+          {filtered.map((c, i) => {
+            const isEditing = editingHref === c._links.self.href;
+            if (isEditing) {
+              return (
+                <tr key={i}>
+                  <td>
+                    <input
+                      name="firstname"
+                      value={editCustomer.firstname}
+                      onChange={handleEditCustomerChange}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      name="lastname"
+                      value={editCustomer.lastname}
+                      onChange={handleEditCustomerChange}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      name="email"
+                      value={editCustomer.email}
+                      onChange={handleEditCustomerChange}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      name="phone"
+                      value={editCustomer.phone}
+                      onChange={handleEditCustomerChange}
+                    />
+                  </td>
+                  <td>
+                    <input
+                      name="city"
+                      value={editCustomer.city}
+                      onChange={handleEditCustomerChange}
+                    />
+                  </td>
+                  <td>
+                    <button onClick={() => saveEditCustomer(c._links.self.href)}>
+                      Tallenna
+                    </button>
+                    <button type="button" onClick={cancelEditCustomer}>
+                      Peruuta
+                    </button>
+                  </td>
+                </tr>
+              );
+            }
+            return (
+              <tr key={i}>
+                <td>{c.firstname}</td>
+                <td>{c.lastname}</td>
+                <td>{c.email}</td>
+                <td>{c.phone}</td>
+                <td>{c.city}</td>
+                <td>
+                  <button onClick={() => startEditCustomer(c)}>Muokkaa</button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

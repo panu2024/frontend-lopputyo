@@ -122,6 +122,27 @@ export default function CustomersPage() {
     }
   }
 
+  async function handleDeleteCustomer(customer) {
+    const ok = window.confirm(
+      'Haluatko varmasti poistaa tämän asiakkaan? '
+    );
+    if (!ok) return;
+    try {
+      const res = await fetch(customer._links.self.href, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        throw new Error('Asiakkaan poisto epäonnistui');
+      }
+      const listRes = await fetch('https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/customers');
+      const json = await listRes.json();
+      setCustomers(json._embedded.customers);
+      setError(null);
+    } catch (err) {
+      alert('Asiakkaan poisto epäonnistui');
+    }
+  }
+
   const sorted = useMemo(() => {
     const arr = [...customers];
     arr.sort((a, b) => {
@@ -344,6 +365,7 @@ export default function CustomersPage() {
                 <td>{c.city}</td>
                 <td>
                   <button onClick={() => startEditCustomer(c)}>Muokkaa</button>
+                  <button onClick={() => handleDeleteCustomer(c)}>Poista</button>
                 </td>
               </tr>
             );

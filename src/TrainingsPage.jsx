@@ -7,34 +7,33 @@ export default function TrainingsPage() {
   const [filter, setFilter] = useState('');
   const [sort, setSort] = useState({ key: 'date', dir: 'asc' });
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch(
-          'https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/trainings'
-        );
-        const data = await res.json();
+  async function loadTrainings() {
+    try {
+      const res = await fetch(
+        'https://customer-rest-service-frontend-personaltrainer.2.rahtiapp.fi/api/trainings'
+      );
+      const data = await res.json();
 
-        
-        const trainingsWithCustomer = await Promise.all(
-          data._embedded.trainings.map(async (t) => {
-            try {
-              const custRes = await fetch(t._links.customer.href);
-              const custData = await custRes.json();
-              return { ...t, customer: custData };
-            } catch {
-              return { ...t, customer: null };
-            }
-          })
-        );
+      const trainingsWithCustomer = await Promise.all(
+        data._embedded.trainings.map(async (t) => {
+          try {
+            const custRes = await fetch(t._links.customer.href);
+            const custData = await custRes.json();
+            return { ...t, customer: custData };
+          } catch {
+            return { ...t, customer: null };
+          }
+        })
+      );
 
-        setTrainings(trainingsWithCustomer);
-      } catch (err) {
-        setError(String(err));
-      }
+      setTrainings(trainingsWithCustomer);
+    } catch (err) {
+      setError(String(err));
     }
+  }
 
-    loadData();
+  useEffect(() => {
+    loadTrainings();
   }, []);
 
   function toggleSort(key) {
@@ -45,7 +44,19 @@ export default function TrainingsPage() {
     );
   }
 
-  
+  async function handleDeleteTraining(training) {
+    const ok = window.confirm('Haluatko varmasti poistaa tämän harjoituksen?');
+    if (!ok) return;
+    try {
+      await fetch(training._links.self.href, {
+        method: 'DELETE'
+      });
+      await loadTrainings();
+    } catch {
+      alert('Harjoituksen poisto epäonnistui');
+    }
+  }
+
   const sorted = useMemo(() => {
     const arr = [...trainings];
     arr.sort((a, b) => {
@@ -58,7 +69,6 @@ export default function TrainingsPage() {
     return arr;
   }, [trainings, sort]);
 
-  
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return sorted;
@@ -81,7 +91,6 @@ export default function TrainingsPage() {
     <div style={{ padding: 16 }}>
       <h2>Trainings</h2>
 
-      
       <div style={{ margin: '8px 0 16px' }}>
         <input
           value={filter}
@@ -108,6 +117,7 @@ export default function TrainingsPage() {
               Activity{arrow('activity')}
             </th>
             <th style={thStyle}>Customer</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -120,6 +130,9 @@ export default function TrainingsPage() {
                 {t.customer
                   ? `${t.customer.firstname} ${t.customer.lastname}`
                   : 'Unknown'}
+              </td>
+              <td>
+                <button onClick={() => handleDeleteTraining(t)}>Poista</button>
               </td>
             </tr>
           ))}
